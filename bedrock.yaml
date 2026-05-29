@@ -20,7 +20,7 @@ data:
   MAX_PLAYERS: "10"
   VIEW_DISTANCE: "12"
   TICK_DISTANCE: "4"
-  ALLOW_CHEATS: "false"
+  ALLOW_CHEATS: "true"
   ONLINE_MODE: "true"        # Xbox Live 인증 강제 (보안 권장)
   ALLOW_LIST: "true"         # allowlist.json 사용
   ALLOW_LIST_USERS: "codekat2805,JJODONG_cse"
