@@ -1,0 +1,111 @@
+# Loki Single Binary (monolithic) — 단일 프로세스, 저사양 최적화
+# -target=all 로 모든 컴포넌트를 한 프로세스에서 실행
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+data:
+  loki.yaml: |
+    auth_enabled: false
+
+    server:
+      http_listen_port: 3100
+      log_level: warn
+
+    common:
+      instance_addr: 127.0.0.1
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+
+    query_range:
+      results_cache:
+        cache:
+          embedded_cache:
+            enabled: true
+            max_size_mb: 32
+
+    schema_config:
+      configs:
+        - from: "2024-01-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+
+    limits_config:
+      retention_period: 168h      # 7일치만 보관
+      ingestion_rate_mb: 4
+      ingestion_burst_size_mb: 6
+
+    compactor:
+      working_directory: /loki/compactor
+      retention_enabled: true
+      delete_request_store: filesystem
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  labels: { app: loki }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: loki }
+  template:
+    metadata:
+      labels: { app: loki }
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: loki
+          image: grafana/loki:3.4.2
+          args:
+            - -config.file=/etc/loki/loki.yaml
+            - -target=all
+          ports:
+            - { name: http, containerPort: 3100 }
+          volumeMounts:
+            - { name: config, mountPath: /etc/loki }
+            - { name: data,   mountPath: /loki }
+          resources:
+            requests: { cpu: "50m", memory: "100Mi" }
+            limits:   { memory: "256Mi" }
+          readinessProbe:
+            httpGet: { path: /ready, port: 3100 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap: { name: loki-config }
+        - name: data
+          persistentVolumeClaim: { claimName: loki-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+spec:
+  selector: { app: loki }
+  ports:
+    - { name: http, port: 3100, targetPort: 3100 }

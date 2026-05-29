@@ -8,6 +8,7 @@ resources:
   - bedrock.yaml
   - monitoring.yaml
   - logging.yaml
+  - loki.yaml
 
 # ─────────────────────────────────────────────────────────────
 # 버저닝의 핵심: 이미지 태그를 여기 한 곳에서만 관리한다.
@@ -16,11 +17,13 @@ resources:
 # ─────────────────────────────────────────────────────────────
 images:
   - name: itzg/minecraft-bedrock-server
-    newTag: "2026.4.1"        # latest 금지. Docker Hub 태그에서 명시 버전 고정
+    newTag: "2026.4.1"
   - name: itzg/mc-backup
-    newTag: latest            # 백업 도구는 비교적 안전, 필요시 핀
+    newTag: latest
   - name: itzg/mc-monitor
-    newTag: 0.15.6            # exporter 버전 고정
+    newTag: 0.15.6
+  - name: grafana/loki
+    newTag: "3.4.2"
 
 # 공통 라벨 (모니터링 셀렉터/대시보드 필터에서 사용)
 labels:

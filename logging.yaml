@@ -54,10 +54,7 @@ data:
 
     loki.write "default" {
       endpoint {
-        url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
-        headers = {
-          "X-Scope-OrgID" = "fake",
-        }
+        url = "http://loki.minecraft.svc.cluster.local:3100/loki/api/v1/push"
       }
     }
 ---
