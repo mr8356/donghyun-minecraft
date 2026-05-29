@@ -81,6 +81,17 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  name: bedrock-headless
+  labels: { app: bedrock }
+spec:
+  clusterIP: None
+  selector: { app: bedrock }
+  ports:
+    - { name: game, port: 19132, targetPort: 19132, protocol: UDP }
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: bedrock
   labels: { app: bedrock }
 spec:
