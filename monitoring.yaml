@@ -28,7 +28,7 @@ spec:
           env:
             # java-svc:25565 (java) + bedrock-svc:19132 (bedrock, edition=bedrock)
             - name: EXPORT_SERVERS
-              value: "bedrock.minecraft.svc.cluster.local:19132"
+              value: "bedrock://bedrock.minecraft.svc.cluster.local:19132"
             # bedrock 서버를 edition 인식시키는 옵션. 현재 이미지 기준 플래그명 확인 후 조정:
             #   --use-server-edition 또는 servers 항목에 'bedrock:' 접두 등.
           ports:
