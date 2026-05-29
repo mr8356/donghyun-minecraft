@@ -22,9 +22,18 @@ data:
         regex         = "minecraft"
         action        = "keep"
       }
-      rule { source_labels = ["__meta_kubernetes_pod_label_app"], target_label = "app" }
-      rule { source_labels = ["__meta_kubernetes_pod_name"],      target_label = "pod" }
-      rule { source_labels = ["__meta_kubernetes_pod_container_name"], target_label = "container" }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        target_label  = "app"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
     }
 
     loki.source.kubernetes "pods" {
@@ -35,8 +44,12 @@ data:
     // 로그에서 이벤트 라벨 추출 (조인/디스커넥트/에러)
     loki.process "mc" {
       forward_to = [loki.write.default.receiver]
-      stage.regex { expression = "(?P<level>INFO|WARN|ERROR)" }
-      stage.labels { values = { level = "" } }
+      stage.regex {
+        expression = "(?P<level>INFO|WARN|ERROR)"
+      }
+      stage.labels {
+        values = { level = "" }
+      }
     }
 
     loki.write "default" {
