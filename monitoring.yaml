@@ -22,7 +22,7 @@ spec:
           image: itzg/mc-monitor
           args:
             - "export-for-prometheus"
-            - "--bedrock-server"
+            - "--bedrock-servers"
             - "bedrock.minecraft.svc.cluster.local:19132"
           ports:
             - { name: metrics, containerPort: 8080 }
