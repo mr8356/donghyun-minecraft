@@ -22,15 +22,8 @@ spec:
           image: itzg/mc-monitor
           args:
             - "export-for-prometheus"
-            # Java는 host:port, Bedrock은 edition 지정 필요.
-            # mc-monitor의 servers 표기에서 bedrock은 ':19132' 포트 + bedrock 플래그/스킴 사용.
-            # 버전별 플래그가 다를 수 있어 EXPORT_SERVERS 환경변수 방식 병행 권장(아래 env 참고).
-          env:
-            # java-svc:25565 (java) + bedrock-svc:19132 (bedrock, edition=bedrock)
-            - name: EXPORT_SERVERS
-              value: "bedrock://bedrock.minecraft.svc.cluster.local:19132"
-            # bedrock 서버를 edition 인식시키는 옵션. 현재 이미지 기준 플래그명 확인 후 조정:
-            #   --use-server-edition 또는 servers 항목에 'bedrock:' 접두 등.
+            - "--bedrock-server"
+            - "bedrock.minecraft.svc.cluster.local:19132"
           ports:
             - { name: metrics, containerPort: 8080 }
           resources:
