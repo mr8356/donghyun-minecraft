@@ -17,14 +17,13 @@ spec:
     metadata:
       labels: { app: mc-monitor }
     spec:
-      hostNetwork: true
       containers:
         - name: exporter
           image: itzg/mc-monitor
           args:
             - "export-for-prometheus"
             - "--bedrock-servers"
-            - "192.168.0.101:31132"
+            - "bedrock.minecraft.svc.cluster.local:19132"
           ports:
             - { name: metrics, containerPort: 8080 }
           resources:
