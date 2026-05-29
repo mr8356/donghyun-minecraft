@@ -86,7 +86,9 @@ metadata:
 spec:
   type: NodePort
   selector: { app: bedrock }
-  externalTrafficPolicy: Local      # 단일노드면 소스IP 보존 + 불필요한 홉 제거
+  externalTrafficPolicy: Local
+  ipFamilyPolicy: SingleStack
+  ipFamilies: ["IPv4"]      # 단일노드면 소스IP 보존 + 불필요한 홉 제거
   ports:
     - name: game
       port: 19132
