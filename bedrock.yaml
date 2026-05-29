@@ -85,6 +85,8 @@ metadata:
   labels: { app: bedrock }
 spec:
   clusterIP: None
+  ipFamilyPolicy: SingleStack
+  ipFamilies: ["IPv4"]
   selector: { app: bedrock }
   ports:
     - { name: game, port: 19132, targetPort: 19132, protocol: UDP }
