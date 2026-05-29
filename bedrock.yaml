@@ -72,8 +72,8 @@ spec:
           volumeMounts:
             - { name: data, mountPath: /data }
           resources:
-            requests: { cpu: "500m", memory: "1Gi" }
-            limits:   { memory: "2Gi" }
+            requests: { cpu: "500m", memory: "2Gi" }
+            limits:   { memory: "4Gi" }
       volumes:
         - name: data
           persistentVolumeClaim: { claimName: bedrock-data }
