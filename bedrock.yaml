@@ -52,21 +52,16 @@ spec:
     metadata:
       labels: { app: bedrock }
     spec:
-      terminationGracePeriodSeconds: 120   # SIGTERM 시 월드 세이브 끝낼 시간 확보
+      terminationGracePeriodSeconds: 120
       nodeSelector:
         kubernetes.io/hostname: k8s-master
       tolerations:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
       containers:
-        # ---------- 메인: Bedrock 서버 ----------
         - name: bedrock
-          image: itzg/minecraft-bedrock-server   # 태그는 root kustomization에서 핀
+          image: itzg/minecraft-bedrock-server
           stdin: true
           tty: true
           envFrom:
@@ -78,38 +73,9 @@ spec:
           resources:
             requests: { cpu: "500m", memory: "1Gi" }
             limits:   { memory: "2Gi" }
-          # itzg 이미지는 mc-monitor를 내장 -> exec 프로브로 활용 (UDP라 TCP 프로브 불가)
-          readinessProbe:
-            exec:
-              command: ["mc-monitor", "status-bedrock", "--host", "localhost", "--port", "19132"]
-            initialDelaySeconds: 30
-            periodSeconds: 15
-          livenessProbe:
-            exec:
-              command: ["mc-monitor", "status-bedrock", "--host", "localhost", "--port", "19132"]
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            failureThreshold: 4
-        # ---------- 사이드카: 로컬 백업 (마스터 노드 /opt/mc-backups/bedrock) ----------
-        - name: backup
-          image: itzg/mc-backup
-          env:
-            - { name: BACKUP_METHOD, value: "tar" }
-            - { name: BACKUP_INTERVAL, value: "2h" }
-            - { name: PRUNE_BACKUPS_DAYS, value: "7" }
-            - { name: SRC_DIR, value: "/data" }
-            - { name: DEST_DIR, value: "/backups" }
-            - { name: PAUSE_IF_NO_PLAYERS, value: "true" }  # 플레이어 없을 때만 백업 (일관성)
-          volumeMounts:
-            - { name: data, mountPath: /data, readOnly: true }
-            - { name: backups, mountPath: /backups }
       volumes:
         - name: data
           persistentVolumeClaim: { claimName: bedrock-data }
-        - name: backups
-          hostPath:
-            path: /opt/mc-backups/bedrock   # 마스터 노드 로컬 디스크. 파드 재시작해도 유지됨
-            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
