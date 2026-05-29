@@ -1,0 +1,93 @@
+{
+  "__inputs": [
+    { "name": "DS_LOKI", "label": "Loki", "type": "datasource", "pluginId": "loki" },
+    { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "pluginId": "prometheus" }
+  ],
+  "title": "Minecraft - Logs & Activity",
+  "uid": "minecraft-logs",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "app",
+        "label": "Server",
+        "type": "custom",
+        "query": "All : .*,Bedrock : bedrock,Java : java",
+        "current": { "text": "All", "value": ".*" },
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Online Players",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "green", "value": null } ] } } },
+      "targets": [
+        { "expr": "sum(minecraft_status_players_online)", "legendFormat": "online" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Server Healthy",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ] } },
+      "targets": [
+        { "expr": "min(minecraft_status_healthy)", "legendFormat": "healthy" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Log Volume by Level",
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "targets": [
+        { "expr": "sum by (level) (count_over_time({namespace=\"minecraft\", app=~\"$app\"} [1m]))", "legendFormat": "{{level}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Player Join / Leave events",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "targets": [
+        { "expr": "sum(count_over_time({namespace=\"minecraft\", app=~\"$app\"} |~ \"connected|joined the game\" [5m]))", "legendFormat": "join" },
+        { "expr": "sum(count_over_time({namespace=\"minecraft\", app=~\"$app\"} |~ \"disconnected|left the game\" [5m]))", "legendFormat": "leave" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Errors & Warnings",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+      "targets": [
+        { "expr": "{namespace=\"minecraft\", app=~\"$app\"} | level=~\"WARN|ERROR\"" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "logs",
+      "title": "Live Server Log",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 11 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true },
+      "targets": [
+        { "expr": "{namespace=\"minecraft\", app=~\"$app\"}" }
+      ]
+    }
+  ]
+}

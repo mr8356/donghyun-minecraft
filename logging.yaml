@@ -1,0 +1,108 @@
+# =====================================================================
+#  Logs: Grafana Alloy(=Promtail 후속)로 컨테이너 stdout 수집 -> Loki
+#  Loki는 별도 설치 가정(예: grafana/loki helm). 여기선 minecraft ns 로그만 수집.
+#  대안: `grafana/loki-stack` 헬름이면 promtail이 따라오므로 이 파일 생략 가능.
+# =====================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+data:
+  config.alloy: |
+    // k8s 파드 발견 -> minecraft 네임스페이스만
+    discovery.kubernetes "pods" {
+      role = "pod"
+    }
+
+    discovery.relabel "minecraft" {
+      targets = discovery.kubernetes.pods.targets
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        regex         = "minecraft"
+        action        = "keep"
+      }
+      rule { source_labels = ["__meta_kubernetes_pod_label_app"], target_label = "app" }
+      rule { source_labels = ["__meta_kubernetes_pod_name"],      target_label = "pod" }
+      rule { source_labels = ["__meta_kubernetes_pod_container_name"], target_label = "container" }
+    }
+
+    loki.source.kubernetes "pods" {
+      targets    = discovery.relabel.minecraft.output
+      forward_to = [loki.process.mc.receiver]
+    }
+
+    // 로그에서 이벤트 라벨 추출 (조인/디스커넥트/에러)
+    loki.process "mc" {
+      forward_to = [loki.write.default.receiver]
+      stage.regex { expression = "(?P<level>INFO|WARN|ERROR)" }
+      stage.labels { values = { level = "" } }
+    }
+
+    loki.write "default" {
+      endpoint {
+        url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy
+  labels: { app: alloy }
+spec:
+  selector:
+    matchLabels: { app: alloy }
+  template:
+    metadata:
+      labels: { app: alloy }
+    spec:
+      serviceAccountName: alloy
+      containers:
+        - name: alloy
+          image: grafana/alloy:latest
+          args:
+            - "run"
+            - "/etc/alloy/config.alloy"
+            - "--server.http.listen-addr=0.0.0.0:12345"
+          volumeMounts:
+            - { name: config, mountPath: /etc/alloy }
+            - { name: varlog, mountPath: /var/log, readOnly: true }
+            - { name: containers, mountPath: /var/lib/docker/containers, readOnly: true }
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { memory: "128Mi" }
+      volumes:
+        - name: config
+          configMap: { name: alloy-config }
+        - name: varlog
+          hostPath: { path: /var/log }
+        - name: containers
+          hostPath: { path: /var/lib/docker/containers }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: alloy
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alloy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: alloy
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: minecraft

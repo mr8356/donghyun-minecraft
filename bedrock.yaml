@@ -1,0 +1,128 @@
+# =====================================================================
+#  Bedrock Edition
+#  - 상태(월드)는 local-path PVC, 설정은 ConfigMap으로 분리
+#  - UDP 19132 -> NodePort 31132 (공유기에서 외부 19132/udp -> 노드IP:31132 포워딩)
+#  - mc-backup 사이드카가 같은 /data 볼륨을 공유하며 주기 백업 -> Garage(S3)
+# =====================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bedrock-config
+data:
+  # itzg 이미지는 server.properties 거의 전부를 env로 받는다.
+  EULA: "TRUE"
+  VERSION: "LATEST"          # 특정 버전 고정하려면 "1.21.50" 등으로. 클라보다 앞서가면 접속불가 주의
+  GAMEMODE: "survival"
+  DIFFICULTY: "normal"
+  LEVEL_NAME: "bedrock-world"
+  SERVER_NAME: "Donghyun BE"
+  MAX_PLAYERS: "10"
+  VIEW_DISTANCE: "12"
+  TICK_DISTANCE: "4"
+  ALLOW_CHEATS: "false"
+  ONLINE_MODE: "true"        # Xbox Live 인증 강제 (보안 권장)
+  ALLOW_LIST: "true"         # allowlist.json 사용
+  DEFAULT_PLAYER_PERMISSION_LEVEL: "member"
+  SERVER_AUTHORITATIVE_MOVEMENT: "server-auth"
+  CORRECT_PLAYER_MOVEMENT: "false"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bedrock-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path      # Rancher local-path-provisioner
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bedrock
+  labels: { app: bedrock }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }      # 두 파드가 같은 PVC 물면 LevelDB 손상 -> 롤링 금지
+  selector:
+    matchLabels: { app: bedrock }
+  template:
+    metadata:
+      labels: { app: bedrock }
+    spec:
+      terminationGracePeriodSeconds: 120   # SIGTERM 시 월드 세이브 끝낼 시간 확보
+      nodeSelector:
+        kubernetes.io/hostname: k8s-master
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        # ---------- 메인: Bedrock 서버 ----------
+        - name: bedrock
+          image: itzg/minecraft-bedrock-server   # 태그는 root kustomization에서 핀
+          stdin: true
+          tty: true
+          envFrom:
+            - configMapRef: { name: bedrock-config }
+          ports:
+            - { name: game, containerPort: 19132, protocol: UDP }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          resources:
+            requests: { cpu: "500m", memory: "1Gi" }
+            limits:   { memory: "2Gi" }
+          # itzg 이미지는 mc-monitor를 내장 -> exec 프로브로 활용 (UDP라 TCP 프로브 불가)
+          readinessProbe:
+            exec:
+              command: ["mc-monitor", "status-bedrock", "--host", "localhost", "--port", "19132"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          livenessProbe:
+            exec:
+              command: ["mc-monitor", "status-bedrock", "--host", "localhost", "--port", "19132"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 4
+        # ---------- 사이드카: 로컬 백업 (마스터 노드 /opt/mc-backups/bedrock) ----------
+        - name: backup
+          image: itzg/mc-backup
+          env:
+            - { name: BACKUP_METHOD, value: "tar" }
+            - { name: BACKUP_INTERVAL, value: "2h" }
+            - { name: PRUNE_BACKUPS_DAYS, value: "7" }
+            - { name: SRC_DIR, value: "/data" }
+            - { name: DEST_DIR, value: "/backups" }
+            - { name: PAUSE_IF_NO_PLAYERS, value: "true" }  # 플레이어 없을 때만 백업 (일관성)
+          volumeMounts:
+            - { name: data, mountPath: /data, readOnly: true }
+            - { name: backups, mountPath: /backups }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: bedrock-data }
+        - name: backups
+          hostPath:
+            path: /opt/mc-backups/bedrock   # 마스터 노드 로컬 디스크. 파드 재시작해도 유지됨
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bedrock
+  labels: { app: bedrock }
+spec:
+  type: NodePort
+  selector: { app: bedrock }
+  externalTrafficPolicy: Local      # 단일노드면 소스IP 보존 + 불필요한 홉 제거
+  ports:
+    - name: game
+      port: 19132
+      targetPort: 19132
+      nodePort: 31132               # 기본 NodePort 범위(30000-32767) 안. 공유기서 19132->31132 포워딩
+      protocol: UDP

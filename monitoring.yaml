@@ -1,0 +1,87 @@
+# =====================================================================
+#  Metrics: mc-monitor를 별도 exporter로 띄워 두 서버를 핑 -> /metrics 노출
+#  Prometheus(kube-prometheus-stack)가 ServiceMonitor로 스크랩.
+#  뽑히는 주요 지표: minecraft_status_healthy, _online (접속 인원), _response_time 등
+# =====================================================================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mc-monitor
+  labels: { app: mc-monitor }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: mc-monitor }
+  template:
+    metadata:
+      labels: { app: mc-monitor }
+    spec:
+      containers:
+        - name: exporter
+          image: itzg/mc-monitor
+          args:
+            - "export-for-prometheus"
+            # Java는 host:port, Bedrock은 edition 지정 필요.
+            # mc-monitor의 servers 표기에서 bedrock은 ':19132' 포트 + bedrock 플래그/스킴 사용.
+            # 버전별 플래그가 다를 수 있어 EXPORT_SERVERS 환경변수 방식 병행 권장(아래 env 참고).
+          env:
+            # java-svc:25565 (java) + bedrock-svc:19132 (bedrock, edition=bedrock)
+            - name: EXPORT_SERVERS
+              value: "bedrock.minecraft.svc.cluster.local:19132"
+            # bedrock 서버를 edition 인식시키는 옵션. 현재 이미지 기준 플래그명 확인 후 조정:
+            #   --use-server-edition 또는 servers 항목에 'bedrock:' 접두 등.
+          ports:
+            - { name: metrics, containerPort: 8080 }
+          resources:
+            requests: { cpu: "50m", memory: "32Mi" }
+            limits:   { memory: "64Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mc-monitor
+  labels: { app: mc-monitor }
+spec:
+  selector: { app: mc-monitor }
+  ports:
+    - { name: metrics, port: 8080, targetPort: 8080 }
+---
+# kube-prometheus-stack(Prometheus Operator)이 깔려 있어야 함
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mc-monitor
+  labels:
+    release: kube-prometheus-stack    # Operator가 잡는 라벨 (설치값에 맞춰 조정)
+spec:
+  selector:
+    matchLabels: { app: mc-monitor }
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+---
+# 예시 알림 규칙: 서버 다운 / 백업 지연
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: minecraft-alerts
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: minecraft.rules
+      rules:
+        - alert: MinecraftServerDown
+          expr: minecraft_status_healthy == 0
+          for: 3m
+          labels: { severity: critical }
+          annotations:
+            summary: "Minecraft 서버 다운: {{ $labels.instance }}"
+        - alert: MinecraftPodOOMRestart
+          expr: increase(kube_pod_container_status_restarts_total{namespace="minecraft"}[15m]) > 0
+          for: 0m
+          labels: { severity: warning }
+          annotations:
+            summary: "Minecraft 파드 재시작/OOM 감지: {{ $labels.pod }}"

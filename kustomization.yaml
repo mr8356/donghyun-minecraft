@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: minecraft
+
+resources:
+  - namespace.yaml
+  - bedrock.yaml
+  - monitoring.yaml
+  - logging.yaml
+
+# ─────────────────────────────────────────────────────────────
+# 버저닝의 핵심: 이미지 태그를 여기 한 곳에서만 관리한다.
+# 매니페스트 안에서는 :latest 를 쓰지 말고, 여기서 명시적 태그로 고정(pin)한다.
+# 버전 올릴 때 이 블록만 수정 -> git commit -> ArgoCD/Flux가 동기화.
+# ─────────────────────────────────────────────────────────────
+images:
+  - name: itzg/minecraft-bedrock-server
+    newTag: "2026.4.1"        # latest 금지. Docker Hub 태그에서 명시 버전 고정
+  - name: itzg/mc-backup
+    newTag: latest            # 백업 도구는 비교적 안전, 필요시 핀
+  - name: itzg/mc-monitor
+    newTag: 0.15.6            # exporter 버전 고정
+
+# 공통 라벨 (모니터링 셀렉터/대시보드 필터에서 사용)
+labels:
+  - includeSelectors: true
+    pairs:
+      stack: minecraft
