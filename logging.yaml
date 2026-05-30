@@ -23,6 +23,10 @@ data:
         action        = "keep"
       }
       rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
         source_labels = ["__meta_kubernetes_pod_label_app"]
         target_label  = "app"
       }
