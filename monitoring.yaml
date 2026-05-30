@@ -160,7 +160,7 @@ spec:
           args:
             - "export-for-prometheus"
             - "--bedrock-servers"
-            - "bedrock.minecraft.svc.cluster.local:19132"
+            - "bedrock-headless.minecraft.svc.cluster.local:19132"
           ports:
             - { name: metrics, containerPort: 8080 }
           resources:
