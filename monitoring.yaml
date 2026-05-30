@@ -1,11 +1,30 @@
 # =====================================================================
 #  Metrics: mc-monitor를 별도 exporter로 띄워 두 서버를 핑 -> /metrics 노출
 #  Prometheus(kube-prometheus-stack)가 ServiceMonitor로 스크랩.
-#  뽑히는 주요 지표: minecraft_status_healthy, _online (접속 인원), _response_time 등
+#  뽑히는 주요 지표: mc_status_healthy, mc_status_players_online, mc_status_response_time_ms
 # =====================================================================
 ---
+# Grafana sidecar가 이 ConfigMap을 자동 감지해 Loki 데이터소스를 등록함
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-datasource
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  loki-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        url: http://loki.minecraft.svc.cluster.local:3100
+        access: proxy
+        isDefault: false
+        jsonData:
+          maxLines: 1000
+---
 # Grafana sidecar가 이 ConfigMap을 자동 감지해 대시보드를 프로비저닝함
-# (라벨 grafana_dashboard: "1" 이 트리거)
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -19,7 +38,7 @@ data:
       "title": "Minecraft - Logs & Activity",
       "uid": "minecraft-logs",
       "schemaVersion": 39,
-      "version": 2,
+      "version": 3,
       "editable": true,
       "time": { "from": "now-6h", "to": "now" },
       "refresh": "30s",
@@ -44,7 +63,7 @@ data:
           "datasource": { "type": "prometheus" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "green", "value": null } ] } } },
           "targets": [
-            { "expr": "sum(minecraft_status_players_online)", "legendFormat": "online" }
+            { "expr": "sum(mc_status_players_online)", "legendFormat": "online" }
           ]
         },
         {
@@ -56,7 +75,7 @@ data:
           "options": { "colorMode": "background" },
           "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ] } },
           "targets": [
-            { "expr": "min(minecraft_status_healthy)", "legendFormat": "healthy" }
+            { "expr": "min(mc_status_healthy)", "legendFormat": "healthy" }
           ]
         },
         {
@@ -73,7 +92,7 @@ data:
             }
           },
           "targets": [
-            { "expr": "minecraft_status_response_time_ms", "legendFormat": "latency" }
+            { "expr": "mc_status_response_time_ms", "legendFormat": "latency" }
           ]
         },
         {
@@ -105,7 +124,7 @@ data:
           "datasource": { "type": "loki" },
           "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
           "targets": [
-            { "expr": "{namespace=\"minecraft\", app=~\"$app\"} | level=~\"WARN|ERROR\"" }
+            { "expr": "{namespace=\"minecraft\", app=~\"$app\"} |~ \"WARN|ERROR\"" }
           ]
         },
         {
@@ -158,13 +177,12 @@ spec:
   ports:
     - { name: metrics, port: 8080, targetPort: 8080 }
 ---
-# kube-prometheus-stack(Prometheus Operator)이 깔려 있어야 함
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: mc-monitor
   labels:
-    release: kube-prometheus-stack    # Operator가 잡는 라벨 (설치값에 맞춰 조정)
+    release: kube-prometheus-stack
 spec:
   selector:
     matchLabels: { app: mc-monitor }
@@ -173,7 +191,6 @@ spec:
       interval: 30s
       path: /metrics
 ---
-# 예시 알림 규칙: 서버 다운 / 백업 지연
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -185,11 +202,11 @@ spec:
     - name: minecraft.rules
       rules:
         - alert: MinecraftServerDown
-          expr: minecraft_status_healthy == 0
+          expr: mc_status_healthy == 0
           for: 3m
           labels: { severity: critical }
           annotations:
-            summary: "Minecraft 서버 다운: {{ $labels.instance }}"
+            summary: "Minecraft 서버 다운: {{ $labels.host }}"
         - alert: MinecraftPodOOMRestart
           expr: increase(kube_pod_container_status_restarts_total{namespace="minecraft"}[15m]) > 0
           for: 0m

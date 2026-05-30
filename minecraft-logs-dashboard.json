@@ -2,7 +2,7 @@
   "title": "Minecraft - Logs & Activity",
   "uid": "minecraft-logs",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "editable": true,
   "time": { "from": "now-6h", "to": "now" },
   "refresh": "30s",
@@ -27,7 +27,7 @@
       "datasource": { "type": "prometheus" },
       "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "green", "value": null } ] } } },
       "targets": [
-        { "expr": "sum(minecraft_status_players_online)", "legendFormat": "online" }
+        { "expr": "sum(mc_status_players_online)", "legendFormat": "online" }
       ]
     },
     {
@@ -39,7 +39,7 @@
       "options": { "colorMode": "background" },
       "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ] } },
       "targets": [
-        { "expr": "min(minecraft_status_healthy)", "legendFormat": "healthy" }
+        { "expr": "min(mc_status_healthy)", "legendFormat": "healthy" }
       ]
     },
     {
@@ -56,7 +56,7 @@
         }
       },
       "targets": [
-        { "expr": "minecraft_status_response_time_ms", "legendFormat": "latency" }
+        { "expr": "mc_status_response_time_ms", "legendFormat": "latency" }
       ]
     },
     {
@@ -88,7 +88,7 @@
       "datasource": { "type": "loki" },
       "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
       "targets": [
-        { "expr": "{namespace=\"minecraft\", app=~\"$app\"} | level=~\"WARN|ERROR\"" }
+        { "expr": "{namespace=\"minecraft\", app=~\"$app\"} |~ \"WARN|ERROR\"" }
       ]
     },
     {
